@@ -7,4 +7,31 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <EmbeddedResource Update="CodeAnalysisResources.resx">
+        <Generator>ResXFileCodeGenerator</Generator>
+        <LastGenOutput>CodeAnalysisResources.resx.Designer.cs</LastGenOutput>
+      </EmbeddedResource>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Update="CodeAnalysisResources.Designer.cs">
+        <DesignTime>True</DesignTime>
+        <AutoGen>True</AutoGen>
+        <DependentUpon>CodeAnalysisResources.resx</DependentUpon>
+      </Compile>
+      <Compile Update="CodeAnalysisResources.Designer.cs">
+        <DesignTime>True</DesignTime>
+        <AutoGen>True</AutoGen>
+        <DependentUpon>CodeAnalysisResources.resx</DependentUpon>
+      </Compile>
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Update="CodeAnalysisResources.resx">
+        <Generator>ResXFileCodeGenerator</Generator>
+        <LastGenOutput>CodeAnalysisResources.Designer.cs</LastGenOutput>
+      </EmbeddedResource>
+    </ItemGroup>
+
 </Project>
