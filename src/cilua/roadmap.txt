@@ -1,0 +1,6 @@
+1.lex
+2.parse
+3.bind
+4.lower
+5.eval
+6.emit

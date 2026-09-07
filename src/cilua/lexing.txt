@@ -1,0 +1,8 @@
+first we need a syntax node class for out tree representing all valid tokens
+second we loop text for next tokens until we reach EOF
+
+for reading tokens
+    first read trivia 
+    then we need to read numbers strings in quotes names keywords and operators
+
+also we need a tree representation. 
