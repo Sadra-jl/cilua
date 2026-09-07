@@ -126,5 +126,5 @@ public enum SyntaxKind
     FunctionBody,
     NameList,
     TableField,
-    FunctionNamePath,           // a.b.c or a.b:c
+    FunctionNamePath // a.b.c or a.b:c
 }
