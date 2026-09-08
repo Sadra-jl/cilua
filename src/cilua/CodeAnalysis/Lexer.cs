@@ -89,6 +89,41 @@ public sealed class Lexer(SourceText source)
 
     private SyntaxToken ReadNumber(int start, List<SyntaxTrivia> leadingTrivia)
     {
+        var isHex = Current == '0' && Lookahead is 'x' or 'X'; //like 0xFF or 0XFF
+        if (isHex)
+        {
+            _position += 2;//skip to FF
+            while (Uri.IsHexDigit(Current) || Current == '.') _position++; // lua supports floating point hex like 0x1A.2B
+            if (Current is 'p' or 'P')// it also supports exponents like 0x1.8p+1
+            {
+                _position++;
+                if (Current is '+' or '-') _position++;//optional exponent sign
+                while (char.IsDigit(Current)) _position++;
+            }
+        }
+        else
+        {
+            while (char.IsDigit(Current)) _position++;
+            if (Current == '.')
+            {
+                _position++;
+                while (char.IsDigit(Current)) _position++;
+            }
+            if (Current is 'e' or 'E')
+            {
+                _position++;
+                if (Current is '+' or '-') _position++;
+                while (char.IsDigit(Current)) _position++;
+            }
+        }
+
+        var text = source.Text.Substring(start, _position - start);
+        var value = ParseNumericLiteral(text, isHex);
+        return MakeToken(SyntaxKind.NumberToken, start, text, value, leadingTrivia);
+    }
+
+    private double ParseNumericLiteral(string text, bool isHex)
+    {
         throw new NotImplementedException();
     }
 
