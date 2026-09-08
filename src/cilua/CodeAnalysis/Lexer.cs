@@ -35,6 +35,115 @@ public sealed class Lexer(SourceText source)
 
     private SyntaxToken NextToken()
     {
+        var leadingTrivia = ReadTrivia();
+
+        var start = _position;
+
+        if (_position >= source.Length)
+        {
+            return MakeToken(SyntaxKind.EndOfFileToken, start, "\0", null, leadingTrivia);
+        }
+
+        // Long string literal: [[ ... ]] or [=[ ... ]=] etc. Must be disambiguated from `[`.
+        if (Current == '[' && Lookahead is '[' or '=')
+        {
+            if (TryReadLongBracket(out var content, out var level, requireStringOpener: true))
+            {
+                var text = source.Text.Substring(start, _position - start);
+                return MakeToken(SyntaxKind.StringToken, start, text, content, leadingTrivia);
+            }
+        }
+
+        if (char.IsDigit(Current) || (Current == '.' && char.IsDigit(Lookahead)))
+        {
+            return ReadNumber(start, leadingTrivia);
+        }
+
+        if (Current is '"' or '\'')
+        {
+            return ReadQuotedString(start, leadingTrivia);
+        }
+
+        if (char.IsLetter(Current) || Current == '_')
+        {
+            return ReadIdentifierOrKeyword(start, leadingTrivia);
+        }
+
+        return ReadOperatorOrPunctuation(start, leadingTrivia);
+    }
+
+    private SyntaxToken ReadOperatorOrPunctuation(int start, List<SyntaxTrivia> leadingTrivia)
+    {
+        throw new NotImplementedException();
+    }
+
+    private SyntaxToken ReadIdentifierOrKeyword(int start, List<SyntaxTrivia> leadingTrivia)
+    {
+        throw new NotImplementedException();
+    }
+
+    private SyntaxToken ReadQuotedString(int start, List<SyntaxTrivia> leadingTrivia)
+    {
+        throw new NotImplementedException();
+    }
+
+    private SyntaxToken ReadNumber(int start, List<SyntaxTrivia> leadingTrivia)
+    {
+        throw new NotImplementedException();
+    }
+
+    private SyntaxToken MakeToken(SyntaxKind kind, int start, string text, object? value, List<SyntaxTrivia> leadingTrivia)
+    {
+        throw new NotImplementedException();
+    }
+
+    private List<SyntaxTrivia> ReadTrivia()
+    {
+        var trivia = new List<SyntaxTrivia>();
+        while (true)
+        {
+            var start = _position;
+            switch (Current)
+            {
+                case ' ' or '\t' or '\r':
+                {
+                    while (Current is ' ' or '\t' or '\r') _position++;
+                    trivia.Add(new SyntaxTrivia(SyntaxKind.WhitespaceTrivia, TextSpan.FromBounds(start, _position), source.Text[start.._position]));
+                    break;
+                }
+                case '\n':
+                    _position++;
+                    trivia.Add(new SyntaxTrivia(SyntaxKind.LineBreakTrivia, TextSpan.FromBounds(start, _position), "\n"));
+                    break;
+                case '-' when Lookahead == '-':
+                {
+                    _position += 2;
+                    if (Current == '[' && Lookahead is '[' or '=')
+                    {
+                        var commentStart = _position;
+                        if (TryReadLongBracket(out _, out _, requireStringOpener: false))
+                        {
+                            trivia.Add(new SyntaxTrivia(SyntaxKind.BlockCommentTrivia, TextSpan.FromBounds(start, _position), source.Text[start.._position]));
+                            continue;
+                        }
+                        _position = commentStart; // not actually a long bracket, fall through to line comment
+                    }
+                    while (Current != '\n' && Current != '\0') _position++;
+                    trivia.Add(new SyntaxTrivia(SyntaxKind.LineCommentTrivia, TextSpan.FromBounds(start, _position), source.Text[start.._position]));
+                    break;
+                }
+            }
+            break;
+        }
+        return trivia;
+    }
+
+    /// <summary>
+    /// Reads [[...]] / [=[...]=] / [==[...]==]-style long brackets, used by both long
+    /// strings and long comments.
+    /// </summary>
+    private bool TryReadLongBracket(out string? content, out int level, bool requireStringOpener)
+    {
         throw new NotImplementedException();
     }
 }
