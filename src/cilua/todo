@@ -1,0 +1,9 @@
+diagnosis messages are not lua diagnosis messages it needes to change maybe a resource file like roslyn?
+
+using isDigit isLetter and other things are based on dotnet not lua so its needed to implement a lua prespective
+
+currently the  number parsing in lexer is implemented poorly(the hex) is should be lexed correctly 
+
+escaping in lex is naively and not lua compatible for now
+
+the syntax token and lexer makeToken  use object for value. one can use typed unions for it.
