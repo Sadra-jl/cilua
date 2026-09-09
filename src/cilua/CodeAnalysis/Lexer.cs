@@ -77,13 +77,117 @@ public sealed class Lexer(SourceText source)
 
     private SyntaxToken ReadOperatorOrPunctuation(int start, List<SyntaxTrivia> leadingTrivia)
     {
-        throw new NotImplementedException();
+        var c = Current;
+        SyntaxKind kind;
+
+        _position++;
+        switch (c)
+        {
+            case '+':
+                kind = SyntaxKind.PlusToken; break;
+            case '-':
+                kind = SyntaxKind.MinusToken; break;
+            case '*':
+                kind = SyntaxKind.StarToken; break;
+            case '/':
+                if (Current == '/') { _position++; kind = SyntaxKind.DoubleSlashToken; }
+                else kind = SyntaxKind.SlashToken;
+                break;
+            case '%':
+                kind = SyntaxKind.PercentToken; break;
+            case '^':
+                kind = SyntaxKind.CaretToken; break;
+            case '#':
+                kind = SyntaxKind.HashToken; break;
+            case '&':
+                kind = SyntaxKind.AmpersandToken; break;
+            case '~':
+                if (Current == '=') { _position++; kind = SyntaxKind.TildeEqualsToken; }
+                else kind = SyntaxKind.TildeToken;
+                break;
+            case '|':
+                kind = SyntaxKind.PipeToken; break;
+            case '<':
+                //<< <= <
+                switch (Current)
+                {
+                    case '<':
+                        _position++; kind = SyntaxKind.LessLessToken;
+                        break;
+                    case '=':
+                        _position++; kind = SyntaxKind.LessEqualsToken;
+                        break;
+                    default:
+                        kind = SyntaxKind.LessToken;
+                        break;
+                }
+                break;
+            case '>':
+                switch (Current)
+                {
+                    //>> >= >
+                    case '>':
+                        _position++; kind = SyntaxKind.GreaterGreaterToken;
+                        break;
+                    case '=':
+                        _position++; kind = SyntaxKind.GreaterEqualsToken;
+                        break;
+                    default:
+                        kind = SyntaxKind.GreaterToken;
+                        break;
+                }
+                break;
+            case '=':
+                if (Current == '=') { _position++; kind = SyntaxKind.EqualsEqualsToken; }
+                else kind = SyntaxKind.EqualsToken;
+                break;
+            case '(':
+                kind = SyntaxKind.OpenParenToken; break;
+            case ')':
+                kind = SyntaxKind.CloseParenToken; break;
+            case '{':
+                kind = SyntaxKind.OpenBraceToken; break;
+            case '}':
+                kind = SyntaxKind.CloseBraceToken; break;
+            case '[':
+                kind = SyntaxKind.OpenBracketToken; break;
+            case ']':
+                kind = SyntaxKind.CloseBracketToken; break;
+            case ':':
+                if (Current == ':') { _position++; kind = SyntaxKind.DoubleColonToken; }
+                else kind = SyntaxKind.ColonToken;
+                break;
+            case ';':
+                kind = SyntaxKind.SemicolonToken; break;
+            case ',':
+                kind = SyntaxKind.CommaToken; break;
+            case '.':
+                if (Current == '.')
+                {
+                    _position++;
+                    if (Current == '.') { _position++; kind = SyntaxKind.DotDotDotToken; }
+                    else kind = SyntaxKind.DotDotToken;
+                }
+                else kind = SyntaxKind.DotToken;
+                break;
+            default:
+                throw new NotImplementedException($"Unexpected character '{c}'.");
+                kind = SyntaxKind.BadToken;
+                break;
+        }
+
+        var text = source.Text.Substring(start, _position - start);
+        return MakeToken(kind, start, text, null, [..leadingTrivia]);
     }
 
     private SyntaxToken ReadIdentifierOrKeyword(int start, List<SyntaxTrivia> leadingTrivia)
     {
-        throw new NotImplementedException();
+        while (char.IsLetterOrDigit(Current) || Current == '_') _position++;
+        var text = source.Text.Substring(start, _position - start);
+        var kind = SyntaxFacts.GetKeywordKind(text);
+        return MakeToken(kind, start, text, null, [..leadingTrivia]);
     }
+
 
     private SyntaxToken ReadQuotedString(int start, List<SyntaxTrivia> leadingTrivia)
     {
@@ -304,9 +408,65 @@ public sealed class Lexer(SourceText source)
 
     /// <summary>
     /// Reads [[...]] / [=[...]=] / [==[...]==]-style long brackets, used by both long
-    /// strings and long comments.
+    /// strings and long comments. Returns false (without consuming input) if `[` isn't
+    /// actually followed by a valid long-bracket opener.
     /// </summary>
     private bool TryReadLongBracket(out string? content, out int level, bool requireStringOpener)
+    {
+        var savedPosition = _position;
+        content = null;
+        level = 0;
+
+        if (Current != '[') return Fail();
+        var scan = _position + 1;
+        var eqCount = 0;
+        while (scan < source.Length && source[scan] == '=') { eqCount++; scan++; }
+        if (scan >= source.Length || source[scan] != '[') return Fail();
+
+        level = eqCount;
+        _position = scan + 1;
+
+        // Lua skips a leading newline immediately after the opening bracket.
+        if (Current == '\r') _position++;
+        if (Current == '\n') _position++;
+
+        var sb = new StringBuilder();
+        while (true)
+        {
+            if (Current == '\0')
+            {
+                throw new NotImplementedException("Unterminated long bracket.");
+                break;
+            }
+            if (Current == ']')
+            {
+                var closeScan = _position + 1;
+                var closeEq = 0;
+                while (closeScan < source.Length && source[closeScan] == '=') { closeEq++; closeScan++; }
+                if (closeEq == level && closeScan < source.Length && source[closeScan] == ']')
+                {
+                    _position = closeScan + 1;
+                    break;
+                }
+            }
+            sb.Append(Current);
+            _position++;
+        }
+
+        content = sb.ToString();
+        return true;
+
+        bool Fail()
+        {
+            _position = savedPosition;
+            return false;
+        }
+    }
+}
+
+internal class SyntaxFacts
+{
+    public static SyntaxKind GetKeywordKind(string text)
     {
         throw new NotImplementedException();
     }
