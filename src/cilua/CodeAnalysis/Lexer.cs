@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Globalization;
 using cilua.CodeAnalysis.Syntax;
 
 namespace cilua.CodeAnalysis;
@@ -41,7 +43,7 @@ public sealed class Lexer(SourceText source)
 
         if (_position >= source.Length)
         {
-            return MakeToken(SyntaxKind.EndOfFileToken, start, "\0", null, leadingTrivia);
+            return MakeToken(SyntaxKind.EndOfFileToken, start, "\0", null, [..leadingTrivia]);
         }
 
         // Long string literal: [[ ... ]] or [=[ ... ]=] etc. Must be disambiguated from `[`.
@@ -50,7 +52,7 @@ public sealed class Lexer(SourceText source)
             if (TryReadLongBracket(out var content, out var level, requireStringOpener: true))
             {
                 var text = source.Text.Substring(start, _position - start);
-                return MakeToken(SyntaxKind.StringToken, start, text, content, leadingTrivia);
+                return MakeToken(SyntaxKind.StringToken, start, text, content, [..leadingTrivia]);
             }
         }
 
@@ -119,17 +121,78 @@ public sealed class Lexer(SourceText source)
 
         var text = source.Text.Substring(start, _position - start);
         var value = ParseNumericLiteral(text, isHex);
-        return MakeToken(SyntaxKind.NumberToken, start, text, value, leadingTrivia);
+        return MakeToken(SyntaxKind.NumberToken, start, text, value, [..leadingTrivia]);
     }
 
     private double ParseNumericLiteral(string text, bool isHex)
     {
-        throw new NotImplementedException();
+        if (!isHex)
+        {
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
+                ? d
+                : throw new NotImplementedException("proper diagnostics");
+        }
+
+        // Minimal hex-float support (0x1p4, 0x.1p-2, plain 0x1A). Full IEEE hex-float
+        // parsing is easy to get subtly wrong — flagged as a TODO for the final lexer.
+        var body = text[2..];
+        var pIndex = body.IndexOfAny(['p', 'P']);
+        var mantissa = pIndex >= 0 ? body[..pIndex] : body;
+        var exponent = 0;
+        if (pIndex >= 0)
+        {
+            int.TryParse(body[(pIndex + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out exponent);
+        }
+
+        var dot = mantissa.IndexOf('.');
+        var intPart = dot >= 0 ? mantissa[..dot] : mantissa;
+        var fracPart = dot >= 0 ? mantissa[(dot + 1)..] : string.Empty;
+
+        double value = 0;
+        foreach (var c in intPart)
+        {
+            value = value * 16 + Convert.ToInt32(c.ToString(), 16);
+        }
+        var fracScale = 1.0 / 16;
+        foreach (var c in fracPart)
+        {
+            value += Convert.ToInt32(c.ToString(), 16) * fracScale;
+            fracScale /= 16;
+        }
+        return value * Math.Pow(2, exponent);
     }
 
-    private SyntaxToken MakeToken(SyntaxKind kind, int start, string text, object? value, List<SyntaxTrivia> leadingTrivia)
+    private SyntaxToken MakeToken(SyntaxKind kind, int start, string text, object? value, ImmutableArray<SyntaxTrivia> leadingTrivia)
     {
-        throw new NotImplementedException();
+        var trailingTrivia = new List<SyntaxTrivia>();
+        // Trailing trivia = whitespace/comments up to (but not including) the next
+        // line break, so a line comment stays attached to the token it follows.
+        while (Current is ' ' or '\t' or '\r')
+        {
+            var wsStart = _position;
+            while (Current is ' ' or '\t' or '\r') _position++;
+            trailingTrivia.Add(new SyntaxTrivia(SyntaxKind.WhitespaceTrivia, TextSpan.FromBounds(wsStart, _position), source.Text[wsStart.._position]));
+        }
+
+        if (Current != '-' || Lookahead != '-')
+            return new SyntaxToken(kind, TextSpan.FromBounds(start, start + text.Length), text, value, leadingTrivia,
+                [.. trailingTrivia]);
+        var commentStart = _position;
+        _position += 2;
+        if (Current == '[' && Lookahead is '[' or '=')
+        {
+            var bracketStart = _position;
+            if (TryReadLongBracket(out _, out _, requireStringOpener: false))
+            {
+                trailingTrivia.Add(new SyntaxTrivia(SyntaxKind.BlockCommentTrivia, TextSpan.FromBounds(commentStart, _position), source.Text[commentStart.._position]));
+                return new SyntaxToken(kind, TextSpan.FromBounds(start, start + text.Length), text, value, leadingTrivia, [..trailingTrivia]);
+            }
+            _position = bracketStart;
+        }
+        while (Current != '\n' && Current != '\0') _position++;
+        trailingTrivia.Add(new SyntaxTrivia(SyntaxKind.LineCommentTrivia, TextSpan.FromBounds(commentStart, _position), source.Text[commentStart.._position]));
+
+        return new SyntaxToken(kind, TextSpan.FromBounds(start, start + text.Length), text, value, leadingTrivia, [..trailingTrivia]);
     }
 
     private List<SyntaxTrivia> ReadTrivia()
