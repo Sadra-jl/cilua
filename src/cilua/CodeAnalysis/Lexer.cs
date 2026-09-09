@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Text;
 using cilua.CodeAnalysis.Syntax;
 
 namespace cilua.CodeAnalysis;
@@ -86,8 +87,73 @@ public sealed class Lexer(SourceText source)
 
     private SyntaxToken ReadQuotedString(int start, List<SyntaxTrivia> leadingTrivia)
     {
-        throw new NotImplementedException();
+        var quote = Current;
+        _position++;
+        var sb = new StringBuilder();
+
+        while (true)
+        {
+            if (Current is '\0' or '\n')
+            {
+               throw new NotImplementedException("Unterminated string literal.");//todo: needed diagnostics class
+                break;
+            }
+            if (Current == quote)
+            {
+                _position++;
+                break;
+            }
+            if (Current == '\\')
+            {
+                _position++;
+                sb.Append(ReadEscapeSequence());
+                continue;
+            }
+            sb.Append(Current);
+            _position++;
+        }
+
+        var text = source.Text.Substring(start, _position - start);
+        return MakeToken(SyntaxKind.StringToken, start, text, sb.ToString(), [..leadingTrivia]);
     }
+
+    private char ReadEscapeSequence()
+    {
+        var c = Current;
+        switch (c)
+        {
+            case 'n': _position++; return '\n';
+            case 't': _position++; return '\t';
+            case 'r': _position++; return '\r';
+            case 'a': _position++; return '\a';
+            case 'b': _position++; return '\b';
+            case 'f': _position++; return '\f';
+            case 'v': _position++; return '\v';
+            case '\\': _position++; return '\\';
+            case '"': _position++; return '"';
+            case '\'': _position++; return '\'';
+            case '\n': _position++; return '\n';
+            case 'z': //todo: \z skips following whitespace, including newlines not accurate 
+                _position++;
+                while (char.IsWhiteSpace(Current)) _position++;
+                return '\0';
+            default:
+                if (char.IsDigit(c))
+                {
+                    var value = 0;
+                    for (var i = 0; i < 3 && char.IsDigit(Current); i++)
+                    {
+                        value = value * 10 + (Current - '0');
+                        _position++;
+                    }
+                    return (char)value;
+                }
+                throw new NotImplementedException( $"Invalid escape sequence '\\{c}'.");
+                _position++;
+                return c;
+        }
+    }
+
 
     private SyntaxToken ReadNumber(int start, List<SyntaxTrivia> leadingTrivia)
     {
