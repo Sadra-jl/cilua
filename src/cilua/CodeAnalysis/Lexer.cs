@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using cilua.CodeAnalysis.Syntax;
+using cilua.Diagnostics;
 
 namespace cilua.CodeAnalysis;
 
@@ -11,7 +12,7 @@ namespace cilua.CodeAnalysis;
 /// discarded, so a formatter or "keep comments" refactor stays possible later —
 /// same trade-off Roslyn makes.
 /// </summary>
-public sealed class Lexer(SourceText source)
+public sealed class Lexer(SourceText source, DiagnosticBag diagnostics)
 {
     private int _position;
 
@@ -171,7 +172,7 @@ public sealed class Lexer(SourceText source)
                 else kind = SyntaxKind.DotToken;
                 break;
             default:
-                throw new NotImplementedException($"Unexpected character '{c}'.");
+                diagnostics.ReportError(new TextSpan(start, 1), $"Unexpected character '{c}'.");
                 kind = SyntaxKind.BadToken;
                 break;
         }
@@ -199,7 +200,7 @@ public sealed class Lexer(SourceText source)
         {
             if (Current is '\0' or '\n')
             {
-               throw new NotImplementedException("Unterminated string literal.");//todo: needed diagnostics class
+                diagnostics.ReportError(TextSpan.FromBounds(start, _position), "Unterminated string literal.");
                 break;
             }
             if (Current == quote)
@@ -252,7 +253,7 @@ public sealed class Lexer(SourceText source)
                     }
                     return (char)value;
                 }
-                throw new NotImplementedException( $"Invalid escape sequence '\\{c}'.");
+                diagnostics.ReportError(new TextSpan(_position, 1), $"Invalid escape sequence '\\{c}'.");
                 _position++;
                 return c;
         }
@@ -298,9 +299,10 @@ public sealed class Lexer(SourceText source)
     {
         if (!isHex)
         {
-            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
-                ? d
-                : throw new NotImplementedException("proper diagnostics");
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var res))
+                return res;
+            diagnostics.ReportError(new TextSpan(_position - text.Length, text.Length), $"Invalid number literal '{text}'.");
+            return 0;
         }
 
         // Minimal hex-float support (0x1p4, 0x.1p-2, plain 0x1A). Full IEEE hex-float
@@ -435,7 +437,7 @@ public sealed class Lexer(SourceText source)
         {
             if (Current == '\0')
             {
-                throw new NotImplementedException("Unterminated long bracket.");
+                diagnostics.ReportError(TextSpan.FromBounds(savedPosition, _position), "Unterminated long bracket.");
                 break;
             }
             if (Current == ']')
@@ -461,13 +463,5 @@ public sealed class Lexer(SourceText source)
             _position = savedPosition;
             return false;
         }
-    }
-}
-
-internal class SyntaxFacts
-{
-    public static SyntaxKind GetKeywordKind(string text)
-    {
-        throw new NotImplementedException();
     }
 }
